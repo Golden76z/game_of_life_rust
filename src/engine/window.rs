@@ -3,16 +3,16 @@ use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes, WindowId};
-use std::num::NonZeroU32;
-use std::rc::Rc;
 
-use softbuffer::{Context, Surface};
+use pollster::block_on;
+use std::sync::Arc;
+
+use crate::engine::renderer::WgpuState;
 
 #[derive(Default)]
 pub struct App {
-    window: Option<Rc<Window>>,
-    context: Option<Context<Rc<Window>>>,
-    surface: Option<Surface<Rc<Window>, Rc<Window>>>,
+    window: Option<Arc<Window>>,
+    gpu: Option<WgpuState>,
 }
 
 impl ApplicationHandler for App {
@@ -28,14 +28,20 @@ impl ApplicationHandler for App {
             attrs = attrs.with_name("game_of_life_rust", "game_of_life_rust");
         }
 
-        let window = Rc::new(event_loop.create_window(attrs).unwrap());
-        let context = Context::new(window.clone()).unwrap();
-        let surface = Surface::new(&context, window.clone()).unwrap();
-        window.request_redraw(); // force first paint so compositor shows the window
+        let window = Arc::new(event_loop.create_window(attrs).unwrap());
+        let gpu = match block_on(WgpuState::new(window.clone())) {
+            Ok(gpu) => gpu,
+            Err(e) => {
+                eprintln!("wgpu init failed: {e}");
+                event_loop.exit();
+                return;
+            }
+        };
+
+        window.request_redraw();
         self.window = Some(window);
-        self.context = Some(context);
-        self.surface = Some(surface);
-        println!("Window created");
+        self.gpu = Some(gpu);
+        println!("Window + wgpu initialized");
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -45,36 +51,29 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
-                if size.width > 0 && size.height > 0 {
-                    if let Some(surface) = &mut self.surface {
-                        surface
-                            .resize(
-                                NonZeroU32::new(size.width).unwrap(),
-                                NonZeroU32::new(size.height).unwrap(),
-                            )
-                            .unwrap();
-                    }
+                if let Some(gpu) = &mut self.gpu {
+                    gpu.resize(size.width, size.height);
                 }
             }
             WindowEvent::RedrawRequested => {
-                if let (Some(window), Some(surface)) = (&self.window, &mut self.surface) {
-                    let size = window.inner_size();
-                    if size.width == 0 || size.height == 0 {
-                        return;
+                if let (Some(window), Some(gpu)) = (&self.window, &mut self.gpu) {
+                    match gpu.render() {
+                        Ok(()) => {}
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            let size = window.inner_size();
+                            gpu.resize(size.width, size.height);
+                        }
+                        Err(wgpu::SurfaceError::OutOfMemory) => {
+                            eprintln!("surface out of memory");
+                            event_loop.exit();
+                        }
+                        Err(wgpu::SurfaceError::Timeout) => {
+                            eprintln!("surface timeout");
+                        }
+                        Err(wgpu::SurfaceError::Other) => {
+                            eprintln!("surface error: other");
+                        }
                     }
-
-                    surface
-                        .resize(
-                            NonZeroU32::new(size.width).unwrap(),
-                            NonZeroU32::new(size.height).unwrap(),
-                        )
-                        .unwrap();
-
-                    let mut buffer = surface.buffer_mut().unwrap();
-                    for pixel in buffer.iter_mut() {
-                        *pixel = 0x00202020;
-                    }
-                    buffer.present().unwrap();
                 }
             }
             _ => (),

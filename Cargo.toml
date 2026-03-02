@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 winit = "0.30.12"
-softbuffer = "0.4"
+wgpu = "28.0.0"
+pollster = "0.3"
