@@ -67,7 +67,18 @@ impl WgpuState {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn surface_format(&self) -> wgpu::TextureFormat {
+        self.config.format
+    }
+
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn render_with<F>(&mut self, draw: F) -> Result<(), wgpu::SurfaceError>
+    where
+        F: FnOnce(&wgpu::Device, &wgpu::Queue, &mut wgpu::CommandEncoder, &wgpu::TextureView),
+    {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -99,9 +110,10 @@ impl WgpuState {
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: None,
-                multiview_mask: None,
             });
         }
+
+        draw(&self.device, &self.queue, &mut encoder, &view);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
