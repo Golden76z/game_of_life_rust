@@ -19,6 +19,7 @@ pub struct App {
     egui_ctx: Option<egui::Context>,
     egui_state: Option<EguiWinitState>,
     egui_renderer: Option<EguiRenderer>,
+    sidebar_open: bool,
     counter: i32,
 }
 
@@ -109,18 +110,117 @@ impl ApplicationHandler for App {
                 ) {
                     let raw_input = egui_state.take_egui_input(window);
                     let full_output = egui_ctx.run(raw_input, |ctx| {
-                        egui::CentralPanel::default().show(ctx, |ui| {
-                            ui.heading("Counter");
-                            ui_counter(ui, &mut self.counter);
-                            ui.label("This is a label");
-                            ui.hyperlink("https://github.com/emilk/egui");
-                            ui.text_edit_singleline(&mut "test");
-                            if ui.button("Click me").clicked() {}
-                            ui.add(egui::Slider::new(&mut 0.0, 0.0..=100.0));
-                            ui.add(egui::DragValue::new(&mut 0.0));
-
-                            ui.checkbox(&mut true, "Checkbox");
+                        // egui::CentralPanel::default().show(ctx, |ui| {
+                        //     // ui.vertical_centered(|ui| {
+                        //     //     ui.heading("Counter");
+                        //     // });
+                        //     // ui_counter(ui, &mut self.counter);
+                        //     // ui.label("This is a label");
+                        //     // ui.hyperlink("https://github.com/emilk/egui");
+                        //     // ui.text_edit_singleline(&mut "test");
+                        //     // if ui.button("Click me").clicked() {}
+                        //     // ui.add(egui::Slider::new(&mut 0.0, 0.0..=100.0));
+                        //     // ui.add(egui::DragValue::new(&mut 0.0));
+                        //
+                        //     // ui.checkbox(&mut true, "Checkbox");
+                        // });
+                        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
+                            ui.horizontal_centered(|ui| {
+                                ui.toggle_value(&mut self.sidebar_open, "☰ Sidebar");
+                                ui.label("My App");
+                            });
                         });
+
+                        let collapsed = 32.0;
+                        let expanded = 260.0;
+
+                        let t = ctx
+                            .animate_bool(egui::Id::new("right_sidebar_anim"), self.sidebar_open);
+                        let width = collapsed + (expanded - collapsed) * t;
+
+                        // Ensure egui keeps repainting while animating:
+                        if t > 0.0 && t < 1.0 {
+                            ctx.request_repaint();
+                        }
+
+                        egui::SidePanel::right("sidebar")
+                            .resizable(false) // animation + manual resizing can fight; keep false for now
+                            .exact_width(width)
+                            .show(ctx, |ui| {
+                                // Header row
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .button(if self.sidebar_open { "⟩" } else { "☰" })
+                                        .clicked()
+                                    {
+                                        self.sidebar_open = !self.sidebar_open;
+                                    }
+                                    // if self.sidebar_open {
+                                    //     ui.heading("Sidebar");
+                                    // }
+                                });
+
+                                ui.separator();
+
+                                if self.sidebar_open {
+                                    // ui.button("Item 1");
+                                    // ui.button("Item 2");
+                                    // ui.button("Settings");
+                                } else {
+                                    ui.label(""); // optional: keep minimal content when collapsed
+                                }
+                            });
+
+                        // egui::CentralPanel::default().show(ctx, |ui| {
+                        //     ui.heading("Main content");
+                        // });
+
+                        // if self.sidebar_open {
+                        //     egui::SidePanel::left("sidebar")
+                        //         .resizable(true)
+                        //         .default_width(220.0)
+                        //         .show(ctx, |ui| {
+                        //             ui.heading("Sidebar");
+                        //             ui.separator();
+                        //             ui.label("This is a label");
+                        //             // ui.button("Item 1");
+                        //             // ui.button("Item 2");
+                        //         });
+                        // }
+                        // let collapsed_width = 28.0;
+
+                        // egui::SidePanel::left("sidebar")
+                        //     .resizable(true)
+                        //     .min_width(collapsed_width)
+                        //     .default_width(if self.sidebar_open {
+                        //         220.0
+                        //     } else {
+                        //         collapsed_width
+                        //     })
+                        //     .show(ctx, |ui| {
+                        //         if !self.sidebar_open {
+                        //             if ui.button("☰").clicked() {
+                        //                 self.sidebar_open = true;
+                        //             }
+                        //             return;
+                        //         }
+                        //
+                        //         ui.horizontal(|ui| {
+                        //             ui.heading("Sidebar");
+                        //             if ui.button("<").clicked() {
+                        //                 self.sidebar_open = false;
+                        //             }
+                        //         });
+                        //
+                        //         ui.separator();
+                        //         // ui.button("Item 1");
+                        //         // ui.button("Item 2");
+                        //     });
+
+                        // egui::CentralPanel::default().show(ctx, |ui| {
+                        //     ui.heading("Main area");
+                        //     ui.label("Content goes here");
+                        // });
                     });
 
                     egui_state.handle_platform_output(window, full_output.platform_output);
